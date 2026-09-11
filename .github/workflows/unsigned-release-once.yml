@@ -2,8 +2,7 @@ name: Unsigned Release Bootstrap
 
 on:
   push:
-    paths:
-      - '.github/workflows/unsigned-release-once.yml'
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
