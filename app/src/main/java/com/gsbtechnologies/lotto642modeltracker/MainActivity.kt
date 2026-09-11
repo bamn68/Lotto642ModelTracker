@@ -1,7 +1,10 @@
 package com.gsbtechnologies.lotto642modeltracker
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
+import android.media.RingtoneManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -31,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.gsbtechnologies.lotto642modeltracker.data.*
 import com.gsbtechnologies.lotto642modeltracker.model.SignalGroup
 import com.gsbtechnologies.lotto642modeltracker.ui.LottoTheme
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -50,6 +54,13 @@ enum class Tab(val label:String){HOME("Home"),GENERATE("Generate"),TICKETS("Tick
 @Composable fun App(vm:LottoViewModel){
     val state by vm.state.collectAsStateWithLifecycle()
     var tab by remember{mutableStateOf(Tab.HOME)}
+
+    LaunchedEffect(state.message){
+        val message=state.message ?: return@LaunchedEffect
+        delay(3000)
+        vm.clearMessage(message)
+    }
+
     Scaffold(
         bottomBar={NavigationBar{Tab.entries.take(5).forEach{t->NavigationBarItem(selected=tab==t,onClick={tab=t},icon={Icon(when(t){Tab.HOME->Icons.Default.Home;Tab.GENERATE->Icons.Default.AutoAwesome;Tab.TICKETS->Icons.Default.ConfirmationNumber;Tab.RESULTS->Icons.Default.EmojiEvents;else->Icons.Default.BarChart},t.label)},label={Text(t.label)})}}},
         topBar={TopAppBar(title={Text("Lotto 6/42 Model Tracker",fontWeight=FontWeight.Bold)},actions={IconButton(onClick={tab=Tab.SETTINGS}){Icon(Icons.Default.Settings,"Settings")}})}
@@ -144,10 +155,37 @@ private fun nextDrawFrom(value:String,hasRun:Boolean)=if(hasRun)value else try{c
     val tree=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()){uri->uri?.let{runCatching{activity.contentResolver.takePersistableUriPermission(it,Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)};vm.setBackupTree(it)}}
     var auto by remember{mutableStateOf(vm.autoBackupEnabled())}
     var major by remember{mutableStateOf(vm.majorWinEnabled())}
+    var soundName by remember{mutableStateOf(vm.majorWinSoundName())}
+    val soundPicker=rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
+        if(result.resultCode==Activity.RESULT_OK){
+            @Suppress("DEPRECATION")
+            val uri=result.data?.getParcelableExtra<Uri>(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            if(uri!=null){
+                vm.setMajorWinSound(uri)
+                soundName=vm.majorWinSoundName()
+            }
+        }
+    }
     LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
         item{Text("Settings",fontSize=24.sp,fontWeight=FontWeight.Bold)}
         item{SectionCard("Backup & Google Drive"){Text("Use Android's system picker to save to Google Drive, device storage, OneDrive or another document provider.");Spacer(Modifier.height(8.dp));Button(onClick={create.launch("Lotto642_Backup_${SimpleDateFormat("yyyy-MM-dd_HHmm",Locale.US).format(Date())}.l642")},Modifier.fillMaxWidth()){Text("BACK UP NOW")};OutlinedButton(onClick={open.launch(arrayOf("application/octet-stream","*/*"))},Modifier.fillMaxWidth()){Text("RESTORE BACKUP")};OutlinedButton(onClick={tree.launch(null)},Modifier.fillMaxWidth()){Text(if(vm.backupTreeSet())"CHANGE AUTO-BACKUP FOLDER" else "SELECT AUTO-BACKUP FOLDER")};Row(verticalAlignment=Alignment.CenterVertically){Switch(auto,{auto=it;vm.setAutoBackup(it)},enabled=vm.backupTreeSet());Spacer(Modifier.width(8.dp));Text("Auto backup after each completed draw")}}}
-        item{SectionCard("Major Win Alert"){Row(verticalAlignment=Alignment.CenterVertically){Switch(major,{major=it;vm.setMajorWin(it)});Spacer(Modifier.width(8.dp));Text("Loud alert for Bought & Locked 5/6 or 6/6 matches")};Button(onClick={vm.testMajorWin()},Modifier.fillMaxWidth()){Text("TEST CUSTOM MAJOR WIN SOUND")};OutlinedButton(onClick={activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,activity.packageName))},Modifier.fillMaxWidth()){Text("ANDROID NOTIFICATION SETTINGS")}}}
+        item{SectionCard("Major Win Alert"){
+            Row(verticalAlignment=Alignment.CenterVertically){Switch(major,{major=it;vm.setMajorWin(it)});Spacer(Modifier.width(8.dp));Text("Loud alert for Bought & Locked 5/6 or 6/6 matches")}
+            Spacer(Modifier.height(8.dp))
+            Text("Alert sound: $soundName",fontWeight=FontWeight.SemiBold)
+            OutlinedButton(onClick={
+                soundPicker.launch(Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply{
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE,RingtoneManager.TYPE_NOTIFICATION)
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT,true)
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT,false)
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_TITLE,"Choose Major Win alert sound")
+                    putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI,vm.majorWinExternalSoundUri())
+                })
+            },Modifier.fillMaxWidth()){Icon(Icons.Default.MusicNote,null);Spacer(Modifier.width(8.dp));Text("CHOOSE ALERT SOUND")}
+            OutlinedButton(onClick={vm.setMajorWinSound(null);soundName=vm.majorWinSoundName()},Modifier.fillMaxWidth()){Text("USE BUILT-IN MAJOR WIN SOUND")}
+            Button(onClick={vm.testMajorWin()},Modifier.fillMaxWidth()){Text("TEST SELECTED ALERT SOUND")}
+            OutlinedButton(onClick={activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,activity.packageName))},Modifier.fillMaxWidth()){Text("ANDROID NOTIFICATION SETTINGS")}
+        }}
         item{Text("App version 1.0.0 • Model V1.0\nPackage ID is fixed for in-place updates. Future database changes must use non-destructive Room migrations.",fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}
     }
 }
