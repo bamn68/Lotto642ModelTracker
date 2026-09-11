@@ -47,6 +47,11 @@ class LottoViewModel(app:Application):AndroidViewModel(app) {
         _state.value=LottoState(draws,baseline,dao.allRuns(),dao.allTickets(),dao.allMatches(),engine.analyze(draws,baseline),message,false)
     }
 
+    fun clearMessage(expected:String?=null) {
+        val current=_state.value.message
+        if(expected==null || current==expected) _state.value=_state.value.copy(message=null)
+    }
+
     fun generate(lines:Int) = viewModelScope.launch(Dispatchers.IO) {
         _state.value=_state.value.copy(busy=true,message=null)
         val draws=dao.allDraws()
@@ -107,6 +112,12 @@ class LottoViewModel(app:Application):AndroidViewModel(app) {
     fun backupTreeSet()=prefs.contains("backup_tree_uri")
     fun setMajorWin(enabled:Boolean){prefs.edit().putBoolean("major_win_enabled",enabled).apply()}
     fun majorWinEnabled()=prefs.getBoolean("major_win_enabled",true)
+    fun setMajorWinSound(uri:Uri?){
+        MajorWinNotifier.setSound(getApplication(),uri)
+        _state.value=_state.value.copy(message=if(uri==null)"Major Win sound reset to built-in" else "Major Win alert sound changed")
+    }
+    fun majorWinSoundName()=MajorWinNotifier.selectedSoundName(getApplication())
+    fun majorWinExternalSoundUri()=MajorWinNotifier.selectedExternalSoundUri(getApplication())
     fun testMajorWin()=MajorWinNotifier.test(getApplication())
     fun latestRunTickets():List<TicketEntity>{
         val run=_state.value.runs.firstOrNull()?:return emptyList()
