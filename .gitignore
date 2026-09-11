@@ -5,5 +5,10 @@ local.properties
 *.iml
 *.jks
 *.keystore
+*.p12
+*.pfx
+*.pem
+*.key
 keystore.properties
+signing-secrets.txt
 .DS_Store
