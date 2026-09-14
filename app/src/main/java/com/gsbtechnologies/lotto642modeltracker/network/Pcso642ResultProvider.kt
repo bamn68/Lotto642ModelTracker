@@ -33,16 +33,16 @@ class Pcso642ResultProvider(
             "__VIEWSTATE" to state.viewState,
             "__VIEWSTATEGENERATOR" to state.viewStateGenerator,
             "__EVENTVALIDATION" to state.eventValidation,
-            "ctl00$ctl00$cphContainer$cpContent$ddlStartMonth" to from.format(DateTimeFormatter.ofPattern("MMMM", Locale.US)),
-            "ctl00$ctl00$cphContainer$cpContent$ddlStartDate" to from.dayOfMonth.toString(),
-            "ctl00$ctl00$cphContainer$cpContent$ddlStartYear" to from.year.toString(),
-            "ctl00$ctl00$cphContainer$cpContent$ddlEndDay" to today.dayOfMonth.toString(),
-            "ctl00$ctl00$cphContainer$cpContent$ddlEndMonth" to today.format(DateTimeFormatter.ofPattern("MMMM", Locale.US)),
-            "ctl00$ctl00$cphContainer$cpContent$ddlEndYear" to today.year.toString(),
+            "ctl00\$ctl00\$cphContainer\$cpContent\$ddlStartMonth" to from.format(DateTimeFormatter.ofPattern("MMMM", Locale.US)),
+            "ctl00\$ctl00\$cphContainer\$cpContent\$ddlStartDate" to from.dayOfMonth.toString(),
+            "ctl00\$ctl00\$cphContainer\$cpContent\$ddlStartYear" to from.year.toString(),
+            "ctl00\$ctl00\$cphContainer\$cpContent\$ddlEndDay" to today.dayOfMonth.toString(),
+            "ctl00\$ctl00\$cphContainer\$cpContent\$ddlEndMonth" to today.format(DateTimeFormatter.ofPattern("MMMM", Locale.US)),
+            "ctl00\$ctl00\$cphContainer\$cpContent\$ddlEndYear" to today.year.toString(),
             // 0 means all games. Filtering the returned table by the exact game name is safer
             // than depending on a numeric game id that PCSO can change.
-            "ctl00$ctl00$cphContainer$cpContent$ddlSelectGame" to "0",
-            "ctl00$ctl00$cphContainer$cpContent$btnSearch" to "Search Lotto"
+            "ctl00\$ctl00\$cphContainer\$cpContent\$ddlSelectGame" to "0",
+            "ctl00\$ctl00\$cphContainer\$cpContent\$btnSearch" to "Search Lotto"
         )
         val html = request("POST", encodeForm(form))
         return Pcso642ResultParser.parseResults(html)
