@@ -1,7 +1,7 @@
 # Release identity
 - App: Lotto 6/42 Model Tracker
-- Version: 1.1.0
-- versionCode: 3
+- Version: 1.1.1
+- versionCode: 4
 - Application ID: `com.gsbtechnologies.lotto642modeltracker`
 - Model: V1.0
 - Database schema: 1
