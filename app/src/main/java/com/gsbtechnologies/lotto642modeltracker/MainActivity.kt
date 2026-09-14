@@ -81,10 +81,11 @@ enum class Tab(val label:String){HOME("Home"),GENERATE("Generate"),TICKETS("Tick
 }
 
 @Composable fun HomeScreen(s:LottoState,onGenerate:()->Unit){
-    val latest=s.draws.firstOrNull()
-    val next=s.runs.firstOrNull()?.targetDrawDate ?: latest?.drawDate
+    val latest=s.draws.firstOrNull{it.verified}
+    val next=latest?.let{runCatching{com.gsbtechnologies.lotto642modeltracker.model.RecommendationEngine().nextDrawDate(it.drawDate)}.getOrNull()}
+        ?: s.runs.firstOrNull()?.targetDrawDate
     LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-        item{HeroCard("NEXT DRAW", next?.let{nextDrawFrom(it,s.runs.isNotEmpty())}?:"—", "Model V1.0 • ${s.baseline.firstOrNull()?.totalDraws?:0} baseline draws")}
+        item{HeroCard("NEXT DRAW", next?:"—", "Model V1.0 • ${s.baseline.firstOrNull()?.totalDraws?:0} baseline draws")}
         item{SectionCard("Latest verified result"){NumberRow(latest?.numbersCsv?.toNumbers()?:emptyList());Spacer(Modifier.height(6.dp));Text(latest?.drawDate?:"No result",color=MaterialTheme.colorScheme.onSurfaceVariant)}}
         item{SectionCard("Current model signals"){
             val hot=s.signals.filter{it.group==SignalGroup.HOT}.take(6)
@@ -95,8 +96,6 @@ enum class Tab(val label:String){HOME("Home"),GENERATE("Generate"),TICKETS("Tick
         item{Text("Selection scores organize historical signals; they do not change the equal mathematical probability of fair 6/42 combinations.",fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}
     }
 }
-
-private fun nextDrawFrom(value:String,hasRun:Boolean)=if(hasRun)value else try{com.gsbtechnologies.lotto642modeltracker.model.RecommendationEngine().nextDrawDate(value)}catch(_:Exception){value}
 
 private val TicketMatchGreen=Color(0xFF2EAF5D)
 private val TicketMissRed=Color(0xFFE5484D)
@@ -196,7 +195,7 @@ private fun winningNumbersForTicket(s:LottoState,t:TicketEntity):Set<Int>?{
             Button(onClick={vm.testMajorWin()},Modifier.fillMaxWidth()){Text("TEST SELECTED ALERT SOUND")}
             OutlinedButton(onClick={activity.startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE,activity.packageName))},Modifier.fillMaxWidth()){Text("ANDROID NOTIFICATION SETTINGS")}
         }}
-        item{Text("App version 1.0.0 • Model V1.0\nPackage ID is fixed for in-place updates. Future database changes must use non-destructive Room migrations.",fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        item{Text("App version 1.1.2 • Model V1.0\nPackage ID is fixed for in-place updates. Future database changes must use non-destructive Room migrations.",fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant)}
     }
 }
 
