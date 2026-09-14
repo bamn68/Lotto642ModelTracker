@@ -100,7 +100,7 @@ internal object Pcso642ResultParser {
     private val row = Regex("<tr\\b[^>]*>(.*?)</tr>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val cell = Regex("<td\\b[^>]*>(.*?)</td>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
     private val tag = Regex("<[^>]+>", setOf(RegexOption.DOT_MATCHES_ALL))
-    private val lottoNumber = Regex("(?<!\\d)([1-9]|[1-3]\\d|4[0-2])(?!\\d)")
+    private val lottoNumber = Regex("(?<!\\d)(0?[1-9]|[1-3]\\d|4[0-2])(?!\\d)")
 
     private val dateFormats = listOf(
         "M/d/yyyy",
