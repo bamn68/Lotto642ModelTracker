@@ -19,6 +19,9 @@ class RecommendationEngineTest {
     }
 
     @Test fun nextDraw_isTueThuSat(){
-        assertEquals("2026-09-12",RecommendationEngine().nextDrawDate("2026-09-10"))
+        val engine=RecommendationEngine()
+        assertEquals("2026-09-12",engine.nextDrawDate("2026-09-10"))
+        assertEquals("2026-09-15",engine.nextDrawDate("2026-09-12"))
+        assertEquals("2026-09-17",engine.nextDrawDate("2026-09-15"))
     }
 }
