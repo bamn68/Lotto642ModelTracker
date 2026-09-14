@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.gsbtechnologies.lotto642modeltracker.backup.BackupManager
 import com.gsbtechnologies.lotto642modeltracker.data.*
 import com.gsbtechnologies.lotto642modeltracker.model.*
+import com.gsbtechnologies.lotto642modeltracker.network.Pcso642ResultProvider
 import com.gsbtechnologies.lotto642modeltracker.notifications.MajorWinNotifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,7 @@ class LottoViewModel(app:Application):AndroidViewModel(app) {
     private val dao=db.lottoDao()
     private val engine=RecommendationEngine()
     private val backup=BackupManager(app,dao)
+    private val resultProvider=Pcso642ResultProvider()
     private val _state=MutableStateFlow(LottoState(busy=true))
     val state:StateFlow<LottoState> = _state
     private val prefs=app.getSharedPreferences("settings",Context.MODE_PRIVATE)
@@ -37,7 +39,10 @@ class LottoViewModel(app:Application):AndroidViewModel(app) {
     init {
         viewModelScope.launch(Dispatchers.IO) {
             SeedData.ensureSeeded(dao)
-            refresh("Ready")
+            // Show saved/local data immediately. The online check happens after this refresh and
+            // never blocks access to the app when PCSO or the network is unavailable.
+            refresh()
+            syncOfficialResults(startup=true)
         }
     }
 
@@ -50,6 +55,76 @@ class LottoViewModel(app:Application):AndroidViewModel(app) {
     fun clearMessage(expected:String?=null) {
         val current=_state.value.message
         if(expected==null || current==expected) _state.value=_state.value.copy(message=null)
+    }
+
+    fun refreshLatestPcsoResult()=viewModelScope.launch(Dispatchers.IO) {
+        syncOfficialResults(startup=false)
+    }
+
+    private suspend fun syncOfficialResults(startup:Boolean) {
+        val fetched=runCatching { resultProvider.fetchRecent() }
+        if(fetched.isFailure) {
+            refresh(if(startup) "PCSO result check unavailable — showing saved results" else "Could not refresh PCSO results: ${fetched.exceptionOrNull()?.message ?: "network error"}")
+            return
+        }
+
+        val results=fetched.getOrDefault(emptyList())
+        if(results.isEmpty()) {
+            refresh(if(startup) null else "PCSO check completed; no recent Lotto 6/42 result was returned")
+            return
+        }
+
+        var inserted=0
+        var upgraded=0
+        var conflicts=0
+        var outcomes=0
+        var changed=false
+
+        // Oldest first keeps scoring and backup/audit behavior deterministic when several draws
+        // are caught up in one launch.
+        for(result in results.sortedBy { it.drawDate }) {
+            val csv=result.numbers.toCsv()
+            val existing=dao.drawForDate(result.drawDate)
+
+            // Never silently replace a result that the user already verified manually if the
+            // official-page parser returns different numbers. Surface the conflict instead.
+            if(existing?.verified==true && existing.numbersCsv!=csv) {
+                conflicts++
+                continue
+            }
+            if(existing?.verified==true && existing.numbersCsv==csv) continue
+
+            val drawId=dao.insertDraw(
+                DrawEntity(
+                    id=existing?.id?:0,
+                    drawDate=result.drawDate,
+                    numbersCsv=csv,
+                    source="PCSO official online",
+                    verified=true,
+                    createdAt=existing?.createdAt?:System.currentTimeMillis()
+                )
+            )
+            val draw=dao.drawForDate(result.drawDate)
+                ?: DrawEntity(drawId,result.drawDate,csv,"PCSO official online",true)
+
+            // Only a newly accepted/verified result can trigger the loud Bought & Locked alert.
+            // A later app launch sees the verified row and will not alert again for the same draw.
+            outcomes += scoreDraw(draw, notifyMajorWins=true)
+            if(existing==null) inserted++ else upgraded++
+            changed=true
+        }
+
+        if(changed && prefs.getBoolean("auto_backup_after_draw",false)) {
+            prefs.getString("backup_tree_uri",null)?.let { runCatching { backup.autoBackupToTree(it) } }
+        }
+
+        val message=when {
+            conflicts>0 -> "PCSO sync updated ${inserted+upgraded} draw(s); $conflicts verified-result conflict(s) were preserved for review"
+            inserted+upgraded>0 -> "PCSO sync added/verified ${inserted+upgraded} Lotto 6/42 draw(s) and scored $outcomes ticket outcomes"
+            startup -> null
+            else -> "Lotto 6/42 results are already up to date"
+        }
+        refresh(message)
     }
 
     fun generate(lines:Int) = viewModelScope.launch(Dispatchers.IO) {
@@ -84,20 +159,26 @@ class LottoViewModel(app:Application):AndroidViewModel(app) {
         val existing=dao.drawForDate(date)
         dao.insertDraw(DrawEntity(id=existing?.id?:0,drawDate=date,numbersCsv=nums.toCsv(),source="Manual verified",verified=true,createdAt=existing?.createdAt?:System.currentTimeMillis()))
         val draw=dao.drawForDate(date) ?: return@launch
-        val runs=dao.runsForDate(date)
+        val scored=scoreDraw(draw,notifyMajorWins=true)
+        if(prefs.getBoolean("auto_backup_after_draw",false)) {
+            prefs.getString("backup_tree_uri",null)?.let { runCatching { backup.autoBackupToTree(it) } }
+        }
+        refresh("Verified result saved and $scored ticket outcomes scored")
+    }
+
+    private suspend fun scoreDraw(draw:DrawEntity,notifyMajorWins:Boolean):Int {
+        val nums=draw.numbersCsv.toNumbers()
+        val runs=dao.runsForDate(draw.drawDate)
         val newMatches=mutableListOf<MatchEntity>()
         for(run in runs) for(ticket in dao.ticketsForRun(run.id)) {
             val matched=ticket.numbersCsv.toNumbers().intersect(nums.toSet()).sorted()
             newMatches += MatchEntity(ticketId=ticket.id,drawId=draw.id,matchCount=matched.size,matchedCsv=matched.toCsv())
-            if(ticket.bought && ticket.lockedAt!=null && matched.size>=5) {
+            if(notifyMajorWins && ticket.bought && ticket.lockedAt!=null && matched.size>=5) {
                 MajorWinNotifier.notifyMatch(getApplication(),matched.size,ticket.lineNumber,matched)
             }
         }
-        dao.insertMatches(newMatches)
-        if(prefs.getBoolean("auto_backup_after_draw",false)) {
-            prefs.getString("backup_tree_uri",null)?.let { runCatching { backup.autoBackupToTree(it) } }
-        }
-        refresh("Verified result saved and ${newMatches.size} ticket outcomes scored")
+        if(newMatches.isNotEmpty()) dao.insertMatches(newMatches)
+        return newMatches.size
     }
 
     fun backupTo(uri:Uri)=viewModelScope.launch(Dispatchers.IO){
