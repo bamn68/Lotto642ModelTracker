@@ -98,6 +98,16 @@ enum class Tab(val label:String){HOME("Home"),GENERATE("Generate"),TICKETS("Tick
 
 private fun nextDrawFrom(value:String,hasRun:Boolean)=if(hasRun)value else try{com.gsbtechnologies.lotto642modeltracker.model.RecommendationEngine().nextDrawDate(value)}catch(_:Exception){value}
 
+private val TicketMatchGreen=Color(0xFF2EAF5D)
+private val TicketMissRed=Color(0xFFE5484D)
+private val TicketActionBlue=Color(0xFF2F80ED)
+
+private fun winningNumbersForTicket(s:LottoState,t:TicketEntity):Set<Int>?{
+    val targetDate=s.runs.firstOrNull{it.id==t.modelRunId}?.targetDrawDate ?: return null
+    val verifiedDraw=s.draws.firstOrNull{it.drawDate==targetDate && it.verified} ?: return null
+    return verifiedDraw.numbersCsv.toNumbers().toSet()
+}
+
 @Composable fun GenerateScreen(vm:LottoViewModel,s:LottoState){
     var count by remember{mutableIntStateOf(10)}
     val tickets=vm.latestRunTickets()
@@ -108,7 +118,7 @@ private fun nextDrawFrom(value:String,hasRun:Boolean)=if(hasRun)value else try{c
         item{Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf(5,10,15,20).forEach{n->FilterChip(selected=count==n,onClick={count=n},label={Text("$n")})}}}
         item{Button(onClick={vm.generate(count)},Modifier.fillMaxWidth().height(52.dp)){Text("GENERATE $count LINES")}}
         if(run!=null) item{Text("Latest portfolio • ${run.targetDrawDate} • ${run.requestedLines} lines",fontWeight=FontWeight.SemiBold)}
-        items(tickets,key={it.id}){TicketCard(it,onBought={vm.setBought(it.id,!it.bought)})}
+        items(tickets,key={it.id}){ticket->TicketCard(ticket,winningNumbersForTicket(s,ticket),onBought={vm.setBought(ticket.id,!ticket.bought)})}
     }
 }
 
@@ -116,7 +126,7 @@ private fun nextDrawFrom(value:String,hasRun:Boolean)=if(hasRun)value else try{c
     val models=s.tickets.filter{!it.isRandomControl}
     LazyColumn(Modifier.fillMaxSize().padding(16.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
         item{Text("Generated & purchased tickets",fontSize=24.sp,fontWeight=FontWeight.Bold);Text("Bought tickets are timestamped and locked for prospective evaluation.")}
-        items(models,key={it.id}){TicketCard(it,onBought={vm.setBought(it.id,!it.bought)})}
+        items(models,key={it.id}){ticket->TicketCard(ticket,winningNumbersForTicket(s,ticket),onBought={vm.setBought(ticket.id,!ticket.bought)})}
     }
 }
 
@@ -195,6 +205,8 @@ private fun nextDrawFrom(value:String,hasRun:Boolean)=if(hasRun)value else try{c
 @Composable fun NumberRow(nums:List<Int>){Row(horizontalArrangement=Arrangement.spacedBy(7.dp)){nums.forEach{Ball(it)}}}
 @Composable fun SignalRow(nums:List<Int>){Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){nums.forEach{Ball(it,small=true)}}}
 @Composable fun Ball(n:Int,small:Boolean=false){Box(Modifier.size(if(small)36.dp else 43.dp).background(MaterialTheme.colorScheme.primary,CircleShape),contentAlignment=Alignment.Center){Text("%02d".format(n),color=MaterialTheme.colorScheme.onPrimary,fontWeight=FontWeight.Bold,fontSize=if(small)13.sp else 15.sp)}}
-@Composable fun TicketCard(t:TicketEntity,onBought:()->Unit){Card(border=if(t.bought)BorderStroke(2.dp,MaterialTheme.colorScheme.secondary)else null){Column(Modifier.fillMaxWidth().padding(14.dp)){Row{Text("LINE %02d".format(t.lineNumber),fontWeight=FontWeight.Bold);Spacer(Modifier.weight(1f));Text("Score ${"%.2f".format(t.selectionScore)}",fontSize=12.sp)};Spacer(Modifier.height(8.dp));NumberRow(t.numbersCsv.toNumbers());Spacer(Modifier.height(8.dp));Text(t.strategy,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);Button(onClick=onBought,colors=if(t.bought)ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.secondary)else ButtonDefaults.buttonColors(),modifier=Modifier.fillMaxWidth()){Icon(if(t.bought)Icons.Default.Lock else Icons.Default.ShoppingCart,null);Spacer(Modifier.width(6.dp));Text(if(t.bought)"BOUGHT & LOCKED" else "MARK BOUGHT")};t.lockedAt?.let{Text("Locked ${SimpleDateFormat("MMM d, h:mm a",Locale.US).format(Date(it))}",fontSize=11.sp)}}}}
+@Composable fun TicketNumberRow(nums:List<Int>,winningNumbers:Set<Int>?){Row(horizontalArrangement=Arrangement.spacedBy(7.dp)){nums.forEach{n->if(winningNumbers==null)Ball(n)else TicketResultBall(n,n in winningNumbers)}}}
+@Composable fun TicketResultBall(n:Int,matched:Boolean){val fill=if(matched)TicketMatchGreen else TicketMissRed;Box(Modifier.size(43.dp).background(fill,CircleShape),contentAlignment=Alignment.Center){Text("%02d".format(n),color=Color.White,fontWeight=FontWeight.Bold,fontSize=15.sp)}}
+@Composable fun TicketCard(t:TicketEntity,winningNumbers:Set<Int>?=null,onBought:()->Unit){Card(border=if(t.bought)BorderStroke(2.dp,MaterialTheme.colorScheme.secondary)else null){Column(Modifier.fillMaxWidth().padding(14.dp)){Row{Text("LINE %02d".format(t.lineNumber),fontWeight=FontWeight.Bold);Spacer(Modifier.weight(1f));Text("Score ${"%.2f".format(t.selectionScore)}",fontSize=12.sp)};Spacer(Modifier.height(8.dp));TicketNumberRow(t.numbersCsv.toNumbers(),winningNumbers);Spacer(Modifier.height(8.dp));Text(t.strategy,fontSize=12.sp,color=MaterialTheme.colorScheme.onSurfaceVariant);Button(onClick=onBought,colors=ButtonDefaults.buttonColors(containerColor=TicketActionBlue,contentColor=Color.White),modifier=Modifier.fillMaxWidth()){Icon(if(t.bought)Icons.Default.Lock else Icons.Default.ShoppingCart,null);Spacer(Modifier.width(6.dp));Text(if(t.bought)"BOUGHT & LOCKED" else "MARK BOUGHT")};t.lockedAt?.let{Text("Locked ${SimpleDateFormat("MMM d, h:mm a",Locale.US).format(Date(it))}",fontSize=11.sp)}}}}
 @Composable fun MetricCard(label:String,value:String,modifier:Modifier=Modifier){Card(modifier){Column(Modifier.padding(12.dp)){Text(value,fontSize=22.sp,fontWeight=FontWeight.Bold);Text(label,fontSize=11.sp)}}}
 @Composable fun StatRow(label:String,value:Int){Row(Modifier.fillMaxWidth()){Text(label);Spacer(Modifier.weight(1f));Text(value.toString(),fontWeight=FontWeight.Bold)}}
